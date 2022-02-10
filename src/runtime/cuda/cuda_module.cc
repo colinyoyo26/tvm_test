@@ -37,6 +37,7 @@
 #include "../pack_args.h"
 #include "../thread_storage_scope.h"
 #include "cuda_common.h"
+#include <fstream>
 
 namespace tvm {
 namespace runtime {
@@ -52,6 +53,22 @@ class CUDAModuleNode : public runtime::ModuleNode {
                           std::string cuda_source)
       : data_(data), fmt_(fmt), fmap_(fmap), cuda_source_(cuda_source) {
     std::fill(module_.begin(), module_.end(), nullptr);
+    std::ifstream fs("../stream_assignment/assignment.json");
+    dmlc::JSONReader reader(&fs);
+
+    reader.BeginObject();
+    std::string kernel_name;
+    int max_id = 0;
+    while (reader.NextObjectItem(&kernel_name)) {
+      reader.Read(&stream_id[kernel_name]);
+      kernel_idx[kernel_name] = -1;
+      max_id = std::max(max_id, 
+               *std::max_element(stream_id[kernel_name].begin(), 
+               stream_id[kernel_name].end()));
+    }
+    streams.assign(max_id + 1, nullptr);
+    for (int i = 1; i <= max_id; i++)
+      cuStreamCreate (&streams[i], CU_STREAM_NON_BLOCKING);
   }
   // destructor
   ~CUDAModuleNode() {
@@ -133,6 +150,14 @@ class CUDAModuleNode : public runtime::ModuleNode {
     return global;
   }
 
+  CUstream GetStream(const std::string &kernel_name) {
+    std::string prefix = kernel_name.substr(0, kernel_name.size() - 8);
+    ICHECK(kernel_idx.count(prefix));
+    if (kernel_name.back() == '0')
+      kernel_idx[prefix] = (kernel_idx[prefix] + 1) % stream_id[prefix].size();
+    return streams[stream_id[prefix][kernel_idx[prefix]]];
+  }
+
  private:
   // the binary data
   std::string data_;
@@ -146,6 +171,10 @@ class CUDAModuleNode : public runtime::ModuleNode {
   std::array<CUmodule, kMaxNumGPUs> module_;
   // internal mutex when updating the module
   std::mutex mutex_;
+  // test
+  std::unordered_map<std::string, std::vector<int>> stream_id;
+  std::unordered_map<std::string, int> kernel_idx;
+  std::vector<CUstream> streams;
 };
 
 // a wrapped function class to get packed func.
@@ -162,12 +191,15 @@ class CUDAWrappedFunc {
   }
   // invoke the function with void arguments
   void operator()(TVMArgs args, TVMRetValue* rv, void** void_args) const {
+    //if (func_name_ == "tvmgen_default_fused_nn_avg_pool2d_1_kernel0")
+      //LOG(INFO) << "tvmgen_default_fused_nn_avg_pool2d_1_kernel0";
+
     int device_id;
     CUDA_CALL(cudaGetDevice(&device_id));
     if (fcache_[device_id] == nullptr) {
       fcache_[device_id] = m_->GetFunc(device_id, func_name_);
     }
-    CUstream strm = static_cast<CUstream>(CUDAThreadEntry::ThreadLocal()->stream);
+    CUstream strm = m_->GetStream(func_name_);//static_cast<CUstream>(CUDAThreadEntry::ThreadLocal()->stream);
     ThreadWorkLoad wl = launch_param_config_.Extract(args);
     CUresult result = cuLaunchKernel(fcache_[device_id], wl.grid_dim(0), wl.grid_dim(1),
                                      wl.grid_dim(2), wl.block_dim(0), wl.block_dim(1),
@@ -184,8 +216,8 @@ class CUDAWrappedFunc {
       if (cuda.length() != 0) {
         os << "// func_name=" << func_name_ << "\n"
            << "// CUDA Source\n"
-           << "// -----------\n"
-           << cuda;
+           << "// -----------\n";
+           //<< cuda;
       }
       LOG(FATAL) << os.str();
     }
