@@ -42,6 +42,79 @@
 namespace tvm {
 namespace runtime {
 
+struct KernelInfo {
+  std::string func_name;
+  int stream_id;
+  std::vector<int> wait_list;
+  cudaEvent_t event;
+
+  void Load (dmlc::JSONReader *reader) {
+    reader->BeginObject();
+    int bitmask = 0;
+    std::string key;
+    while (reader->NextObjectItem(&key)) {
+        if (key == "func_name") {
+          reader->Read(&func_name);
+          bitmask |= 1;
+        } else if (key == "stream_id") {
+          reader->Read(&stream_id);
+          bitmask |= 2;
+        } else if (key == "wait_list") {
+          reader->Read(&wait_list);
+          bitmask |= 4;
+        } else {
+          LOG(FATAL) << "do not support key " << key;
+        }
+    }
+    ICHECK_EQ(bitmask, 1 | 2 | 4) << "invalid format";
+    cudaEventCreate(&event);
+  }
+};
+
+class StreamPlan {
+public:
+  StreamPlan() {
+    std::ifstream fs("../stream_assignment/assignment.json");
+    dmlc::JSONReader reader(&fs);
+    std::string assignment;
+
+    reader.BeginObject();
+    reader.NextObjectItem(&assignment);
+    ICHECK(assignment == "assignment");
+    reader.Read(&info_);
+    int max_stream_id = 0;
+    for (auto &kinfo : info_)
+      max_stream_id = std::max(max_stream_id, kinfo.stream_id);
+    streams_.assign(max_stream_id + 1, nullptr);
+    for (int i = 1; i <= max_stream_id; i++)
+      cuStreamCreate(&streams_[i], CU_STREAM_NON_BLOCKING);
+  }
+
+  void IncCounter (const std::string &kernel_name) {
+    if (kernel_name.back() == '0')
+      counter_++;
+    std::string prefix = kernel_name.substr(0, kernel_name.size() - 8);
+    ICHECK(prefix == info_[counter_].func_name);
+  }
+
+  void WaitEvent() {
+    for (int kid : info_[counter_].wait_list)
+      cudaStreamWaitEvent(GetStream(), info_[kid].event);
+  }
+
+  void RecordEvent() {
+    cudaEventRecord(info_[counter_].event, GetStream());
+  }
+
+  CUstream GetStream() {
+    return streams_[info_[counter_].stream_id];
+  }
+private:
+  std::vector<KernelInfo> info_;
+  std::vector<CUstream> streams_;
+  int counter_ = -1;
+};
+
 // Module to support thread-safe multi-GPU execution.
 // cuModule is a per-GPU module
 // The runtime will contain a per-device module table
@@ -53,22 +126,6 @@ class CUDAModuleNode : public runtime::ModuleNode {
                           std::string cuda_source)
       : data_(data), fmt_(fmt), fmap_(fmap), cuda_source_(cuda_source) {
     std::fill(module_.begin(), module_.end(), nullptr);
-    std::ifstream fs("../stream_assignment/assignment.json");
-    dmlc::JSONReader reader(&fs);
-
-    reader.BeginObject();
-    std::string kernel_name;
-    int max_id = 0;
-    while (reader.NextObjectItem(&kernel_name)) {
-      reader.Read(&stream_id[kernel_name]);
-      kernel_idx[kernel_name] = -1;
-      max_id = std::max(max_id, 
-               *std::max_element(stream_id[kernel_name].begin(), 
-               stream_id[kernel_name].end()));
-    }
-    streams.assign(max_id + 1, nullptr);
-    for (int i = 1; i <= max_id; i++)
-      cuStreamCreate (&streams[i], CU_STREAM_NON_BLOCKING);
   }
   // destructor
   ~CUDAModuleNode() {
@@ -150,12 +207,8 @@ class CUDAModuleNode : public runtime::ModuleNode {
     return global;
   }
 
-  CUstream GetStream(const std::string &kernel_name) {
-    std::string prefix = kernel_name.substr(0, kernel_name.size() - 8);
-    ICHECK(kernel_idx.count(prefix));
-    if (kernel_name.back() == '0')
-      kernel_idx[prefix] = (kernel_idx[prefix] + 1) % stream_id[prefix].size();
-    return streams[stream_id[prefix][kernel_idx[prefix]]];
+  StreamPlan &GetPlan() {
+    return plan_;
   }
 
  private:
@@ -172,9 +225,7 @@ class CUDAModuleNode : public runtime::ModuleNode {
   // internal mutex when updating the module
   std::mutex mutex_;
   // test
-  std::unordered_map<std::string, std::vector<int>> stream_id;
-  std::unordered_map<std::string, int> kernel_idx;
-  std::vector<CUstream> streams;
+  StreamPlan plan_;
 };
 
 // a wrapped function class to get packed func.
@@ -199,11 +250,18 @@ class CUDAWrappedFunc {
     if (fcache_[device_id] == nullptr) {
       fcache_[device_id] = m_->GetFunc(device_id, func_name_);
     }
-    CUstream strm = m_->GetStream(func_name_);//static_cast<CUstream>(CUDAThreadEntry::ThreadLocal()->stream);
+
+    StreamPlan &plan = m_->GetPlan();
+    plan.IncCounter(func_name_);
+    plan.WaitEvent();
+
+    CUstream strm = plan.GetStream(); //static_cast<CUstream>(CUDAThreadEntry::ThreadLocal()->stream);
+
     ThreadWorkLoad wl = launch_param_config_.Extract(args);
     CUresult result = cuLaunchKernel(fcache_[device_id], wl.grid_dim(0), wl.grid_dim(1),
                                      wl.grid_dim(2), wl.block_dim(0), wl.block_dim(1),
                                      wl.block_dim(2), wl.dyn_shmem_size, strm, void_args, nullptr);
+    plan.RecordEvent();
     if (result != CUDA_SUCCESS && result != CUDA_ERROR_DEINITIALIZED) {
       const char* msg;
       cuGetErrorName(result, &msg);
