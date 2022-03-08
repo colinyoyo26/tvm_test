@@ -37,6 +37,8 @@
 #include <utility>
 #include <vector>
 
+#include "emitter.h"
+
 namespace tvm {
 namespace runtime {
 
@@ -71,6 +73,7 @@ class TVM_DLL GraphExecutor : public ModuleNode {
   };
 
  public:
+  GraphExecutor() : emitter(op_execs_) {}
   /*!
    * \brief Get member function to front-end
    * \param name The name of the function.
@@ -445,6 +448,8 @@ class TVM_DLL GraphExecutor : public ModuleNode {
   std::vector<size_t> data_alignment_;
   /*! \brief Operator on each node. */
   std::vector<std::function<void()>> op_execs_;
+  /*! \brief Emit order */
+  Emitter emitter;
   /*! \brief Linked parameter lookup function. */
   PackedFunc lookup_linked_param_;
   /*! \brief Module's _lookup_linked_param function, used by DefaultLookupLinkedParam. */

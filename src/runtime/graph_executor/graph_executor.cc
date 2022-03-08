@@ -56,10 +56,7 @@ inline size_t GetDataAlignment(const DLTensor& arr) {
  * \brief Run all the operations one by one.
  */
 void GraphExecutor::Run() {
-  // setup the array and requirements.
-  for (size_t i = 0; i < op_execs_.size(); ++i) {
-    if (op_execs_[i]) op_execs_[i]();
-  }
+  emitter.EmitAll();
 }
 
 /*!
@@ -86,6 +83,7 @@ void GraphExecutor::Init(const std::string& graph_json, tvm::runtime::Module mod
   }
   this->SetupStorage();
   this->SetupOpExecs();
+  emitter.ExtractExecutable();
   for (size_t i = 0; i < input_nodes_.size(); i++) {
     const uint32_t nid = input_nodes_[i];
     std::string& name = nodes_[nid].name;
@@ -190,12 +188,12 @@ void GraphExecutor::SetOutputZeroCopy(int index, DLTensor* data_ref) {
 /*!
  * \brief Get the number of outputs
  *
- * \return The number of outputs from graph.
+ * * \return The number of outputs from graph.
  */
 int GraphExecutor::NumOutputs() const { return outputs_.size(); }
 /*!
  * \brief Get the number of inputs
- *
+
  * \return The number of inputs to the graph.
  */
 int GraphExecutor::NumInputs() const { return input_nodes_.size(); }

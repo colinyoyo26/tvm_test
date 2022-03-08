@@ -44,7 +44,7 @@ namespace runtime {
 
 struct KernelInfo {
   std::string func_name;
-  int stream_id;
+  int stream_id, emit_order;
   std::vector<int> wait_list;
   cudaEvent_t event;
 
@@ -62,11 +62,14 @@ struct KernelInfo {
         } else if (key == "wait_list") {
           reader->Read(&wait_list);
           bitmask |= 4;
+        } else if (key == "emit_order") {
+          reader->Read(&emit_order);
+          bitmask |= 8;
         } else {
           LOG(FATAL) << "do not support key " << key;
         }
     }
-    ICHECK_EQ(bitmask, 1 | 2 | 4) << "invalid format";
+    ICHECK_EQ(bitmask, 1 | 2 | 4 | 8) << "invalid format";
     cudaEventCreate(&event);
   }
 };
@@ -83,8 +86,9 @@ public:
     ICHECK(assignment == "assignment");
     reader.Read(&info_);
     int max_stream_id = 0;
-    for (auto &kinfo : info_)
+    for (auto &kinfo : info_) {
       max_stream_id = std::max(max_stream_id, kinfo.stream_id);
+    }
     streams_.assign(max_stream_id + 1, nullptr);
     for (int i = 1; i <= max_stream_id; i++)
       cuStreamCreate(&streams_[i], CU_STREAM_NON_BLOCKING);
@@ -92,9 +96,10 @@ public:
 
   void IncCounter (const std::string &kernel_name) {
     if (kernel_name.back() == '0')
-      counter_++;
+      counter_ = (counter_ + 1) % info_.size();
     std::string prefix = kernel_name.substr(0, kernel_name.size() - 8);
-    ICHECK(prefix == info_[counter_].func_name);
+    ICHECK(prefix == info_[counter_].func_name) << kernel_name << ' ' << info_[counter_].func_name << ' ' << info_[counter_].emit_order;
+    ICHECK(counter_ == info_[counter_].emit_order) << "expected: " << info_[counter_].emit_order << ",  got: " << counter_;
   }
 
   void WaitEvent() {
