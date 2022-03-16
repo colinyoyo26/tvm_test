@@ -482,7 +482,7 @@ GraphExecutor::CreateTVMOp(const TVMOpParam& param, const std::vector<DLTensor>&
   }
 
   if (param.func_name == "__nop") {
-    return {[]() {}, arg_ptr};
+    return {nullptr, arg_ptr};
   } else if (param.func_name == "__copy") {
     // Perform cross device data copy.
     // Directly copy data from the input to the output.

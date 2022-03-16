@@ -33,9 +33,7 @@ public:
 
   void EmitAll() {
     for (size_t i : idx) {
-      if (ops_[i]) {
         ops_[i]();
-      }
     }
   }
 
