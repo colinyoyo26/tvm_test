@@ -5,34 +5,32 @@
 class Emitter {
 public:
   Emitter (std::vector<std::function<void()>> &ops) : ops_(ops) {
+    Reset();
+  }
+
+  void Reset() {
     std::ifstream fs("../stream_assignment/emit_order.json");
 
     dmlc::JSONReader reader(&fs);
     std::string emit_order;
-    std::vector<size_t> order;
+    std::vector<int> order;
 
     reader.BeginObject();
     reader.NextObjectItem(&emit_order);
     ICHECK(emit_order == "emit_order");
     reader.Read(&order);
-    idx.resize(order.size());
+    size_t emit_cnt = static_cast<size_t>(*std::max_element(order.begin(), order.end())) + 1;
+    idx.assign(emit_cnt, -1);
     for (size_t i = 0; i < order.size(); i++) {
-      idx[order[i]] = i;
+      if (order[i] != -1) {
+        idx[order[i]] = i;
+      }
     }
-  }
-
-  void ExtractExecutable () {
-    size_t cnt = 0;
-    for (size_t i = 0; i < ops_.size(); i++) {
-      if (ops_[i])
-        ops_[cnt++] = ops_[i];
-    }
-    ops_.resize(cnt);
-    ICHECK(cnt == idx.size());
   }
 
   void EmitAll() {
     for (size_t i : idx) {
+        ICHECK(ops_[i]);
         ops_[i]();
     }
   }

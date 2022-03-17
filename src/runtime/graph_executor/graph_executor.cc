@@ -59,6 +59,12 @@ void GraphExecutor::Run() {
   emitter.EmitAll();
 }
 
+void GraphExecutor::Reset() {
+  emitter.Reset();
+  module_.Reset();
+}
+
+
 /*!
  * \brief Initialize the graph executor with graph and device.
  * \param graph_json The execution graph.
@@ -83,7 +89,6 @@ void GraphExecutor::Init(const std::string& graph_json, tvm::runtime::Module mod
   }
   this->SetupStorage();
   this->SetupOpExecs();
-  emitter.ExtractExecutable();
   for (size_t i = 0; i < input_nodes_.size(); i++) {
     const uint32_t nid = input_nodes_[i];
     std::string& name = nodes_[nid].name;
@@ -610,6 +615,10 @@ PackedFunc GraphExecutor::GetFunction(const std::string& name,
     return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
       CHECK(String::CanConvertFrom(args[0])) << "Input key is not a string";
       *rv = this->GetInputIndex(args[0].operator String());
+    });
+  } else if (name == "reset") {
+    return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
+      this->Reset();
     });
   } else {
     return PackedFunc();

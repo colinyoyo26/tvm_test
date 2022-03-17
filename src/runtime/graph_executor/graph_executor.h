@@ -86,6 +86,7 @@ class TVM_DLL GraphExecutor : public ModuleNode {
    * \return The type key of the executor.
    */
   const char* type_key() const final { return "GraphExecutor"; }
+  void Reset();
   void Run();
 
   /*!

@@ -76,6 +76,13 @@ PackedFunc ModuleNode::GetFunction(const std::string& name, bool query_imports) 
   return pf;
 }
 
+// Only available for cuda module
+// root modile: library module
+// imports_[0]: cuda module
+void ModuleNode::Reset() {
+  this->imports_[0].Reset();
+}
+
 Module Module::LoadFromFile(const std::string& file_name, const std::string& format) {
   std::string fmt = GetFileFormat(file_name, format);
   ICHECK(fmt.length() != 0) << "Cannot deduce format of file " << file_name;
@@ -90,6 +97,10 @@ Module Module::LoadFromFile(const std::string& file_name, const std::string& for
                        << "that you are on the correct hardware architecture.";
   Module m = (*f)(file_name, format);
   return m;
+}
+
+void Module::Reset() { 
+  (*this)->Reset(); 
 }
 
 void ModuleNode::SaveToFile(const std::string& file_name, const std::string& format) {

@@ -81,6 +81,7 @@ class Module : public ObjectRef {
    *  Re-create import relationship by calling Import.
    */
   TVM_DLL static Module LoadFromFile(const std::string& file_name, const std::string& format = "");
+  void Reset();
   // refer to the corresponding container.
   using ContainerType = ModuleNode;
   friend class ModuleNode;
@@ -184,6 +185,7 @@ class TVM_DLL ModuleNode : public Object {
   const PackedFunc* GetFuncFromEnv(const std::string& name);
   /*! \return The module it imports from */
   const std::vector<Module>& imports() const { return imports_; }
+  virtual void Reset();
 
   // integration with the existing components.
   static constexpr const uint32_t _type_index = TypeIndex::kRuntimeModule;
