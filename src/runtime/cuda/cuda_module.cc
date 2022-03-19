@@ -48,6 +48,10 @@ struct KernelInfo {
   std::vector<int> wait_list;
   cudaEvent_t event;
 
+  KernelInfo() {
+    cudaEventCreate(&event);
+  }
+
   void Load (dmlc::JSONReader *reader) {
     reader->BeginObject();
     int bitmask = 0;
@@ -70,13 +74,20 @@ struct KernelInfo {
         }
     }
     ICHECK_EQ(bitmask, 1 | 2 | 4 | 8) << "invalid format";
-    cudaEventCreate(&event);
+  }
+
+  ~KernelInfo() {
+     //cudaEventDestroy(event);
   }
 };
 
 class StreamPlan {
 public:
-  StreamPlan() {
+  StreamPlan() {   
+    Reset();
+  }
+
+  void Reset() {
     std::ifstream fs("../stream_assignment/assignment.json");
     dmlc::JSONReader reader(&fs);
     std::string assignment;
@@ -84,11 +95,19 @@ public:
     reader.BeginObject();
     reader.NextObjectItem(&assignment);
     ICHECK(assignment == "assignment");
+
+    info_.clear();
     reader.Read(&info_);
+    counter_ = -1;
+
     int max_stream_id = 0;
     for (auto &kinfo : info_) {
       max_stream_id = std::max(max_stream_id, kinfo.stream_id);
     }
+
+    for (size_t i = 1; i < streams_.size(); i++) {
+      cuStreamDestroy(streams_[i]);
+    } 
     streams_.assign(max_stream_id + 1, nullptr);
     for (int i = 1; i <= max_stream_id; i++)
       cuStreamCreate(&streams_[i], CU_STREAM_NON_BLOCKING);
@@ -98,7 +117,7 @@ public:
     if (kernel_name.back() == '0')
       counter_ = (counter_ + 1) % info_.size();
     std::string prefix = kernel_name.substr(0, kernel_name.size() - 8);
-    ICHECK(prefix == info_[counter_].func_name) << kernel_name << ' ' << info_[counter_].func_name << ' ' << info_[counter_].emit_order;
+    ICHECK(prefix == info_[counter_].func_name) << kernel_name << ' ' << info_[counter_].func_name << ' ' << info_[counter_].emit_order << counter_;
     ICHECK(counter_ == info_[counter_].emit_order) << "expected: " << info_[counter_].emit_order << ",  got: " << counter_;
   }
 
@@ -214,6 +233,10 @@ class CUDAModuleNode : public runtime::ModuleNode {
 
   StreamPlan &GetPlan() {
     return plan_;
+  }
+
+  void Reset() {
+    plan_.Reset();
   }
 
  private:
