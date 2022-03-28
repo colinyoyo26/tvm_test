@@ -79,8 +79,8 @@ PackedFunc ModuleNode::GetFunction(const std::string& name, bool query_imports) 
 // Only available for cuda module
 // root modile: library module
 // imports_[0]: cuda module
-void ModuleNode::Reset() {
-  this->imports_[0].Reset();
+void ModuleNode::SetAssignment(const std::string &assignment_json) {
+  this->imports_[0].SetAssignment(assignment_json);
 }
 
 Module Module::LoadFromFile(const std::string& file_name, const std::string& format) {
@@ -99,8 +99,8 @@ Module Module::LoadFromFile(const std::string& file_name, const std::string& for
   return m;
 }
 
-void Module::Reset() { 
-  (*this)->Reset(); 
+void Module::SetAssignment(const std::string &assignment_json) { 
+  (*this)->SetAssignment(assignment_json); 
 }
 
 void ModuleNode::SaveToFile(const std::string& file_name, const std::string& format) {

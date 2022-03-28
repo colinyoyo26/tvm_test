@@ -83,12 +83,8 @@ struct KernelInfo {
 
 class StreamPlan {
 public:
-  StreamPlan() {   
-    Reset();
-  }
-
-  void Reset() {
-    std::ifstream fs("../stream_assignment/assignment.json");
+  void SetAssignment(const std::string &assignment_json) {
+    std::ifstream fs(assignment_json);
     dmlc::JSONReader reader(&fs);
     std::string assignment;
 
@@ -235,8 +231,8 @@ class CUDAModuleNode : public runtime::ModuleNode {
     return plan_;
   }
 
-  void Reset() {
-    plan_.Reset();
+  void SetAssignment(const std::string &assignment_json) {
+    plan_.SetAssignment(assignment_json);
   }
 
  private:

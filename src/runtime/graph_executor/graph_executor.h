@@ -86,7 +86,7 @@ class TVM_DLL GraphExecutor : public ModuleNode {
    * \return The type key of the executor.
    */
   const char* type_key() const final { return "GraphExecutor"; }
-  void Reset();
+  void SetSchedule(const std::string &emit_order_json, const std::string &assignment_json);
   void Run();
 
   /*!

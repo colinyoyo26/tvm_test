@@ -4,12 +4,10 @@
 
 class Emitter {
 public:
-  Emitter (std::vector<std::function<void()>> &ops) : ops_(ops) {
-    Reset();
-  }
+  Emitter (std::vector<std::function<void()>> &ops) : ops_(ops) {}
 
-  void Reset() {
-    std::ifstream fs("../stream_assignment/emit_order.json");
+  void SetEmitOrder(const std::string &emit_order_json) {
+    std::ifstream fs(emit_order_json);
 
     dmlc::JSONReader reader(&fs);
     std::string emit_order;

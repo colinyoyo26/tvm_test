@@ -161,7 +161,7 @@ class GraphModule(object):
         self._get_num_inputs = module["get_num_inputs"]
         self._load_params = module["load_params"]
         self._share_params = module["share_params"]
-        self._reset = module["reset"]
+        self._set_schedule = module["set_schedule"]
 
     def set_input(self, key=None, value=None, **params):
         """Set inputs to the module via kwargs
@@ -312,8 +312,8 @@ class GraphModule(object):
         """
         self._share_params(other.module, bytearray(params_bytes))
     
-    def reset(self):
-        self._reset()
+    def set_schedule(self, order_json, assignment_json):
+        self._set_schedule(order_json, assignment_json)
 
     def __getitem__(self, key):
         """Get internal module function

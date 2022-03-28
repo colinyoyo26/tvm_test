@@ -59,11 +59,11 @@ void GraphExecutor::Run() {
   emitter.EmitAll();
 }
 
-void GraphExecutor::Reset() {
-  emitter.Reset();
-  module_.Reset();
+void GraphExecutor::SetSchedule(const std::string &emit_order_json, 
+                                const std::string &assignment_json) {
+  emitter.SetEmitOrder(emit_order_json);
+  module_.SetAssignment(assignment_json);
 }
-
 
 /*!
  * \brief Initialize the graph executor with graph and device.
@@ -616,9 +616,11 @@ PackedFunc GraphExecutor::GetFunction(const std::string& name,
       CHECK(String::CanConvertFrom(args[0])) << "Input key is not a string";
       *rv = this->GetInputIndex(args[0].operator String());
     });
-  } else if (name == "reset") {
+  } else if (name == "set_schedule") {
     return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
-      this->Reset();
+      CHECK(String::CanConvertFrom(args[0]));
+      CHECK(String::CanConvertFrom(args[1]));
+      this->SetSchedule(args[0].operator String(), args[1].operator String());
     });
   } else {
     return PackedFunc();
